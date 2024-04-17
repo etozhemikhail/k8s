@@ -33,11 +33,16 @@ variable "subnet_id" {
 
 variable "subnets" {
   description = "map of subnets"
+  type        = map(object({ zone = string, cidr = string }))
   default = {
     "subnet-1" = { zone = "ru-central1-a", cidr = "192.168.10.0/24" }
-    "subnet-2" = { zone = "ru-central1-b", cidr = "192.168.20.0/24" }
-    "subnet-3" = { zone = "ru-central1-d", cidr = "192.168.30.0/24" }
+    #    "subnet-2" = { zone = "ru-central1-b", cidr = "192.168.20.0/24" }
+    #    "subnet-3" = { zone = "ru-central1-d", cidr = "192.168.30.0/24" }
   }
+}
+
+locals {
+  enable_nat = true
 }
 
 #service-account
@@ -72,9 +77,9 @@ resource "yandex_vpc_network" "k8s-network" {
 resource "yandex_vpc_subnet" "k8s-subnet" {
   for_each       = var.subnets
   name           = each.key
-  zone           = each.value["zone"]
+  zone           = each.value.zone
   network_id     = yandex_vpc_network.k8s-network.id
-  v4_cidr_blocks = [each.value["cidr"]]
+  v4_cidr_blocks = [each.value.cidr]
 }
 
 #Compute instance group for masters
@@ -100,14 +105,13 @@ resource "yandex_compute_instance_group" "k8s-masters" {
       }
     }
 
-    network_interface {
-      network_id = yandex_vpc_network.k8s-network.id
-      subnet_ids = [
-        yandex_vpc_subnet.k8s-subnet["subnet-1"].id,
-        yandex_vpc_subnet.k8s-subnet["subnet-2"].id,
-        yandex_vpc_subnet.k8s-subnet["subnet-3"].id,
-      ]
-      nat = true
+    dynamic "network_interface" {
+      for_each = yandex_vpc_subnet.k8s-subnet
+
+      content {
+        subnet_ids = [network_interface.value.id]
+        nat        = local.enable_nat
+      }
     }
 
     scheduling_policy {
@@ -132,8 +136,6 @@ resource "yandex_compute_instance_group" "k8s-masters" {
   allocation_policy {
     zones = [
       "ru-central1-a",
-#      "ru-central1-b",
-#      "ru-central1-d",
     ]
   }
 
@@ -168,14 +170,13 @@ resource "yandex_compute_instance_group" "k8s-workers" {
       }
     }
 
-    network_interface {
-      network_id = yandex_vpc_network.k8s-network.id
-      subnet_ids = [
-        yandex_vpc_subnet.k8s-subnet["subnet-1"].id,
-        yandex_vpc_subnet.k8s-subnet["subnet-2"].id,
-        yandex_vpc_subnet.k8s-subnet["subnet-3"].id,
-      ]
-      nat = true
+    dynamic "network_interface" {
+      for_each = yandex_vpc_subnet.k8s-subnet
+
+      content {
+        subnet_ids = [network_interface.value.id]
+        nat        = local.enable_nat
+      }
     }
 
     scheduling_policy {
@@ -200,8 +201,6 @@ resource "yandex_compute_instance_group" "k8s-workers" {
   allocation_policy {
     zones = [
       "ru-central1-a",
-#      "ru-central1-b",
-#      "ru-central1-d",
     ]
   }
 
