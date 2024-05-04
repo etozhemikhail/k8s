@@ -211,3 +211,69 @@ resource "yandex_compute_instance_group" "k8s-workers" {
     max_deleting    = 3
   }
 }
+
+#Compute instance group for ingress
+
+resource "yandex_compute_instance_group" "k8s-ingress" {
+  name               = "k8s-ingress"
+  service_account_id = yandex_iam_service_account.iac.id
+  folder_id          = var.folder_id
+
+  instance_template {
+    name        = "ingress-{instance.index}"
+    platform_id = "standard-v3"
+
+    resources {
+      cores         = 2
+      memory        = 6
+      core_fraction = 20
+    }
+
+    boot_disk {
+      initialize_params {
+        image_id = var.image_id
+        size = 20
+      }
+    }
+
+    dynamic "network_interface" {
+      for_each = yandex_vpc_subnet.k8s-subnet
+
+      content {
+        subnet_ids = [network_interface.value.id]
+        nat        = local.enable_nat
+      }
+    }
+
+    scheduling_policy {
+      preemptible = true
+    }
+
+    metadata = {
+      user-data = "${file("./user.txt")}"
+    }
+
+    network_settings {
+      type = "STANDARD"
+    }
+  }
+
+  scale_policy {
+    fixed_scale {
+      size = 2
+    }
+  }
+
+  allocation_policy {
+    zones = [
+      "ru-central1-a",
+    ]
+  }
+
+  deploy_policy {
+    max_unavailable = 3
+    max_creating    = 3
+    max_expansion   = 3
+    max_deleting    = 3
+  }
+}
