@@ -35,3 +35,5 @@ terraform.rc
 
 # Ignore user data
 user.txt
+key.json
+main-backup.tf1
